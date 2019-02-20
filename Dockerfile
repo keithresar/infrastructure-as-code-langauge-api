@@ -9,5 +9,6 @@ RUN curl https://bootstrap.pypa.io/get-pip.py | python && \
 
 EXPOSE 8080
 
+# ELASTICACHE= LANGUAGELAYER_API_KEY= ./language_api.py
 CMD ["./language_api.py"]
 

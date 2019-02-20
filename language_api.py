@@ -5,7 +5,7 @@
 # determine the langauge.  Application accepts the following environment variables
 #
 #   o LANGUAGELAYER_API_KEY
-#   o ELASTICACHE...
+#   o ELASTICACHE = 1 | 0
 #
 
 HTTP_PORT = 8080
@@ -16,6 +16,7 @@ import os
 import sys
 import time
 import json
+import redis
 import requests
 from urlparse import parse_qs
 from BaseHTTPServer import BaseHTTPRequestHandler,HTTPServer
@@ -61,6 +62,17 @@ class Handler(BaseHTTPRequestHandler):
         return(r.text)
 
 
+    def cache_lookup(self,key):
+        r = redis.Redis(host=ELASTICACHE, port=6379, db=0)
+        print r.get(key)
+        return(r.get(key))
+
+
+    def cache_set(self,key,value):
+        r = redis.Redis(host=ELASTICACHE, port=6379, db=0)
+        r.set(key,value)
+
+
     def do_GET(self):
         # Verify request has URL
         try:
@@ -70,34 +82,37 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(400,"Required 'url' parameter missing")
             return
 
-        # TODO Verify cache entry (if enabled)
+        # Verify cache entry (if enabled)
+        if ELASTICACHE:  language_layer_response = self.cache_lookup(url)
 
-        # Get target URL
-        try:
-            target_response_text = self.get_target(url)
-        except:
-            self.send_error(500,"Error fetching requested url")
-            return
+        if not language_layer_response:
+	        # Get target URL
+	        try:
+	            target_response_text = self.get_target(url)
+	        except:
+	            self.send_error(500,"Error fetching requested url")
+	            return
 
-        # Extract target body
-        try:
-            target_response_body = self.get_target_body(target_response_text)
-        except:
-            self.send_error(500,"Error extracting requested url text")
-            return
+	        # Extract target body
+	        try:
+	            target_response_body = self.get_target_body(target_response_text)
+	        except:
+	            self.send_error(500,"Error extracting requested url text")
+	            return
 
-        # Issue Languagelayer request
-        try:
-            language_layer_response = self.languagelayer_detection(target_response_body)
-        except:
-            self.send_error(500,"Error communicating with languagelayer API")
-            return
+	        # Issue Languagelayer request
+	        try:
+	            language_layer_response = self.languagelayer_detection(target_response_body)
+	        except:
+	            self.send_error(500,"Error communicating with languagelayer API")
+	            return
 
 
-        # TODO Store in cache (if enabled)
+	        # Store in cache (if enabled)
+	        if ELASTICACHE:  self.cache_set(url,language_layer_response)
 
-        # TODO Pause to add slowdown if cache not used
-        #time.sleep(WAIT_TIME_SECS)
+	        # TODO Pause to add slowdown if cache not used
+	        time.sleep(WAIT_TIME_SECS)
 
         self.send_response(200)
         self.send_header('Content-type','application/json')
@@ -114,6 +129,9 @@ except:
     sys.stderr.write("Missing LANGUAGELAYER_API_KEY\n")
     sys.exit(1)
 
+if 'ELASTICACHE' in os.environ:  ELASTICACHE = os.environ['ELASTICACHE']
+else:  ELASTICACHE = False
+
 
 try:
     server = HTTPServer(('', HTTP_PORT), Handler)
@@ -123,4 +141,3 @@ try:
 except:
     print 'Shutting down the web server'
     server.socket.close()
-
