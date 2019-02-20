@@ -84,6 +84,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # Verify cache entry (if enabled)
         if ELASTICACHE:  language_layer_response = self.cache_lookup(url)
+	else:  language_layer_response = None
 
         if not language_layer_response:
 	        # Get target URL
